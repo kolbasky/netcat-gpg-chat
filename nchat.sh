@@ -50,7 +50,8 @@ tput smcup && clear
 trap "tput rmcup; tput sgr0; exit 0;" EXIT
 
 # temporary file to hold partner's user key during handshake
-publickeyfile=$(mktemp 2>/dev/null || echo "/tmp/temp_$$_${RANDOM}${RANDOM}${RANDOM}")
+publickeyfile=$(mktemp 2>/dev/null || echo "/tmp/tmp.${RANDOM}${RANDOM}${RANDOM}")
+:>"$publickeyfile" && chmod 600 "$publickeyfile" 
 trap "tput rmcup; tput sgr0; rm -f \"$publickeyfile\"; exit 0;" EXIT
 # we listen for partner's key, write it to tempfile and import
 handshake() {
@@ -106,8 +107,7 @@ echo ""
 rm -f "$publickeyfile"
 
 # we can use file but this way is more secure - no history on disk
-chatpipe=$(mktemp || echo "/tmp/temp_$$_${RANDOM}${RANDOM}${RANDOM}")
-rm -f ${chatpipe}
+chatpipe=$(mktemp -u 2>/dev/null || echo "/tmp/tmp.${RANDOM}${RANDOM}${RANDOM}")
 mkfifo -m 600 "$chatpipe"
 
 # previous nc has already exited the port is free
