@@ -67,8 +67,8 @@ if [[ $( gpg --list-secret-keys $username 2> /dev/null | grep -c "^sec" ) -lt 1 
 fi
 
 # try to send our public key to client
-echo -n "🕛 Waiting for partner $host:$port to become online"
-until (timeout 15 gpg --armor --export $(gpg --list-secret-keys --with-colons $username | grep "^sec" | head -1 | cut -d: -f5) | base64 -w 0 > /dev/tcp/$host/$port) 2>/dev/null; do
+echo -n "Waiting for partner $host:$port to become online"
+until (timeout 15 gpg --armor --export $(gpg --list-secret-keys --with-colons $username | grep "^sec" | head -1 | cut -d: -f5) | base64 -w 0 | nc -w 3 $host $port) 2>/dev/null; do
   echo -n "."
   sleep 1;
 done
@@ -115,8 +115,8 @@ trap "kill $NC_PID; rm -f /tmp/chatpipe \"$publickeyfile\"; tput rmcup; tput sgr
 
 send_msg() {
     encrypted=$(echo "$3" | gpg --encrypt --armor --recipient "$PARTNER_KEY" --trust-model always 2>/dev/null)
-    echo -e "$encrypted" | base64 -w 0 > /dev/tcp/$1/$2
-    echo "" > /dev/tcp/$1/$2
+    echo -e "$encrypted" | base64 -w 0 | nc -w 5 $host $port
+    echo "" | nc -w 5 $host $port
     echo -ne "${BLUE}[$(date +%T)]${NC}${username}: "
 }
 
