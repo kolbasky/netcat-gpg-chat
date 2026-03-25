@@ -50,12 +50,12 @@ tput smcup && clear
 trap "tput rmcup; tput sgr0; exit 0;" EXIT
 
 # temporary file to hold partner's user key during handshake
-publickeyfile=$(mktemp 2>/dev/null || echo "/tmp/chatkey_$$_$RANDOM")
+publickeyfile=$(mktemp 2>/dev/null || echo "/tmp/temp_$$_${RANDOM}${RANDOM}${RANDOM}")
 trap "tput rmcup; tput sgr0; rm -f \"$publickeyfile\"; exit 0;" EXIT
 # we listen for partner's key, write it to tempfile and import
 handshake() {
     nc -l $port | base64 -d > "${publickeyfile}"
-    PARTNER_KEY=$(gpg --import "${publickeyfile}" 2>&1 | grep 'gpg: key' | grep -Eo '".*"' | tr -d '"')
+    partner_key=$(gpg --import "${publickeyfile}" 2>&1 | grep 'gpg: key' | grep -Eo '".*"' | tr -d '"')
 }
 # do it in background
 handshake &
@@ -77,12 +77,12 @@ echo ""
 wait ${handshake_pid}
 
 # import key and ask to user confirm it
-PARTNER_KEY=$(gpg --import "${publickeyfile}" 2>&1 | grep 'gpg: key' | grep -Eo '".*"' | tr -d '"')
-if [[ -z $PARTNER_KEY ]]; then
-    read -p "Enter partner's Key ID (email or fingerprint): " PARTNER_KEY
+partner_key=$(gpg --import "${publickeyfile}" 2>&1 | grep 'gpg: key' | grep -Eo '".*"' | tr -d '"')
+if [[ -z $partner_key ]]; then
+    read -p "Enter partner's Key ID (email or fingerprint): " partner_key
 fi
 echo "🔒 Contact your partner over some other channel and compare your keys! It is important to prevent MITM attacks!"
-echo "🔒 ${PARTNER_KEY}'s key is: $(gpg --list-keys $PARTNER_KEY | head -2 | tail -1 | xargs)"
+echo "🔒 ${partner_key}'s key is: $(gpg --list-keys $partner_key | head -2 | tail -1 | xargs)"
 echo "🔒 Your public key is: $(gpg --list-keys $username | head -2 | tail -1 | xargs)"
 user_confirm=""
 until [[ "$user_confirm" =~ ^[YyNn]$ ]]; do
@@ -103,25 +103,28 @@ until echo test | gpg --encrypt --armor --recipient $username | gpg --decrypt --
 done
 echo "✅ Passphrase cached. Starting chat..."
 echo ""
+rm -f "$publickeyfile"
 
 # we can use file but this way is more secure - no history on disk
-mkfifo /tmp/chatpipe
+chatpipe=$(mktemp || echo "/tmp/temp_$$_${RANDOM}${RANDOM}${RANDOM}")
+rm -f ${chatpipe}
+mkfifo -m 600 "$chatpipe"
 
 # previous nc has already exited the port is free
-nc -k -l $port > /tmp/chatpipe &
+nc -k -l $port > "$chatpipe" &
 NC_PID=$!
 # cleanup after ourselves
-trap "kill $NC_PID; rm -f /tmp/chatpipe \"$publickeyfile\"; tput rmcup; tput sgr0; exit 0;" EXIT
+trap "kill $NC_PID; rm -f \"$chatpipe\" \"$publickeyfile\"; tput rmcup; tput sgr0; exit 0;" EXIT
 
 send_msg() {
-    encrypted=$(echo "${username}: $3" | gpg --encrypt --sign --armor --recipient "$PARTNER_KEY" --local-user "$username" --trust-model always 2>/dev/null)
+    encrypted=$(echo "${username}: $3" | gpg --encrypt --sign --armor --recipient "$partner_key" --local-user "$username" --trust-model always 2>/dev/null)
     echo -e "$encrypted" | base64 -w 0 | nc -w 5 $host $port
     echo "" | nc -w 5 $host $port
     echo -ne "${BLUE}[$(date +%T)]${NC}${username}: "
 }
 
 receive_msg() {
-    while read incoming_msg < /tmp/chatpipe; do
+    while read incoming_msg < "$chatpipe"; do
         decoded=$(echo "$incoming_msg" | base64 -d 2>/dev/null)
         decrypted=$(echo "$decoded" | gpg --decrypt --pinentry-mode=loopback 2>/dev/null)
         if [[ -n "$decrypted" ]]; then
