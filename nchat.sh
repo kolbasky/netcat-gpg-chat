@@ -13,7 +13,7 @@ usage() {
 Usage: $0 <your_nickname> <partner_host:port>
 
 Arguments:
-  your_nickname         Your display name in chat. 
+  your_nickname         Your display name in chat.
                         Also this name is used to look up/create gpg key.
   partner_host:port     Partner's address and port to connect to.
                         This port is also used as listen port on your host.
@@ -54,7 +54,7 @@ publickeyfile=$(mktemp 2>/dev/null || echo "/tmp/chatkey_$$_$RANDOM")
 trap "tput rmcup; tput sgr0; rm -f \"$publickeyfile\"; exit 0;" EXIT
 # we listen for partner's key, write it to tempfile and import
 handshake() {
-    nc -l $port | base64 -d > "${publickeyfile}" 
+    nc -l $port | base64 -d > "${publickeyfile}"
     PARTNER_KEY=$(gpg --import "${publickeyfile}" 2>&1 | grep 'gpg: key' | grep -Eo '".*"' | tr -d '"')
 }
 # do it in background
@@ -114,7 +114,7 @@ NC_PID=$!
 trap "kill $NC_PID; rm -f /tmp/chatpipe \"$publickeyfile\"; tput rmcup; tput sgr0; exit 0;" EXIT
 
 send_msg() {
-    encrypted=$(echo "$3" | gpg --encrypt --armor --recipient "$PARTNER_KEY" --trust-model always 2>/dev/null)
+    encrypted=$(echo "${username}: $3" | gpg --encrypt --sign --armor --recipient "$PARTNER_KEY" --local-user "$username" --trust-model always 2>/dev/null)
     echo -e "$encrypted" | base64 -w 0 | nc -w 5 $host $port
     echo "" | nc -w 5 $host $port
     echo -ne "${BLUE}[$(date +%T)]${NC}${username}: "
@@ -131,7 +131,7 @@ receive_msg() {
             echo -ne "\n${RED}[$(date +%T)] Failed to decrypt message or message is empty${NC}: $incoming_msg"
             echo -ne "\n${BLUE}[$(date +%T)]${NC}${username}: "
         fi
-    done 
+    done
 }
 echo -ne "${BLUE}[$(date +%T)]${NC}${username}: "
 # run receiving process in background
@@ -139,6 +139,6 @@ receive_msg &
 
 while :; do
     read message
-    send_msg "${host}" "${port}" "${username}: ${message}"
+    send_msg "${host}" "${port}" "${message}"
     sleep 0.1
 done
